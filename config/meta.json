@@ -1,0 +1,9 @@
+{
+	"name": "GraphQLForUmbraco",
+	"version": "0.0.1",
+	"url": "https://github.com/Offroadcode/graphql-for-umbraco",
+	"author": "Offroadcode - Kyle Weems - Jack Penney - Pete Duncanson - Et. Al.",
+	"authorUrl": "http://offroadcode.com/",
+	"license": "MIT",
+	"licenseUrl": "http://opensource.org/licenses/MIT"
+}
