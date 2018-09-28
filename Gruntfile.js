@@ -42,7 +42,7 @@ module.exports = function(grunt) {
             },
             dist: {
                 src: [
-                    'source/resources/api.js',
+                    'source/resources/graphql.for.umbraco.api.resource.js',
                     'source/controllers/dashboard.controller.js'
                 ],
                 dest: '<%= basePath %>/js/graphql.for.umbraco.js'
@@ -92,7 +92,6 @@ module.exports = function(grunt) {
         },
   
         umbracoPackage: {
-
             dist: {
                 src: 'tmp/umbraco',
                 dest: 'pkg',
@@ -139,6 +138,7 @@ module.exports = function(grunt) {
                 ],
             js: [
                 'source/controllers/*.js',
+                '!source/resources/graphql.for.umbraco.api.resource.js',
                 '!source/controllers/dashboard.controller.js'
             ],
             css: [

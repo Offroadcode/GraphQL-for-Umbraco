@@ -1,4 +1,4 @@
-angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", function($scope, contentTypeResource) {
+angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", function($scope, contentTypeResource, notificationsService, graphQLForUmbracoApiResource) {
 
     // Initialization Methods //////////////////////////////////////////////////
 
@@ -10,6 +10,7 @@ angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", 
     $scope.init = function() {
         $scope.setInitialVariables();
         $scope.getDocTypes();
+        $scope.getPermissions();
     };
 
     /**
@@ -20,7 +21,10 @@ angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", 
     $scope.setInitialVariables = function () {
         $scope.docTypes = [];
         $scope.groups = [];
+        $scope.permissions = [];
+        $scope.pendingPermissions = [];
         $scope.selectedDocType = false;
+        $scope.selectedDocTypeAlias = '';
         $scope.selectedDocTypeName = '';
     };
 
@@ -41,16 +45,40 @@ angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", 
         });
     };
 
-    // Helper Methods //////////////////////////////////////////////////////////
-
     /**
-     * @method isDocTypeSelected Returns `true` if a docType has been selected 
-     * by the user.
-     * @returns {boolean}
+     * @method getPermissions - Gets currently set GraphQL visibility 
+     * permissions via API.
+     * @returns {void}
      */
-    $scope.isDocTypeSelected = function() {
-        return !!$scope.selectedDocType;
-    };
+    $scope.getPermissions = function() {
+        return graphQLForUmbracoApiResource.get().then(function(response) {
+            var permissions = [];
+            response.permissions.forEach(function(responsePermission) {
+                var docTypeAlreadyInPermission = false;
+                var alias = responsePermission.doctypeAlias;
+                $scope.permissions.forEach(function(permission) {
+                    if (permission.alias == alias) {
+                        docTypeAlreadyInPermission = true;
+                        permission.properties.push({
+                            alias: responsePermission.propertyAlias,
+                            isBuiltInProperty: responsePermission.isBuiltInProperty
+                        });
+                    }
+                });
+                if (!docTypeAlreadyInPermission) {
+                    $scope.permissions.push({
+                        alias: alias,
+                        properties: [{
+                            alias: responsePermission.propertyAlias,
+                            isBuiltInProperty: responsePermission.isBuiltInProperty
+                        }]
+                    });
+                }
+            });
+        });
+    }
+
+    // Helper Methods //////////////////////////////////////////////////////////
 
     /**
      * @method getPropertiesForDocType Uses `contentTypeResource` to get a list 
@@ -80,6 +108,57 @@ angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", 
         });
     };
 
+    /**
+     * @method isDocTypeSelected Returns `true` if a docType has been selected 
+     * by the user.
+     * @returns {boolean}
+     */
+    $scope.isDocTypeSelected = function() {
+        return !!$scope.selectedDocType;
+    };
+
+    /**
+     * @method isPropertyVisible Returns `true` if the docType with the matching 
+     * `docTypeAlias` has the permissions set for GraphQL to view the property 
+     * with the matching `propertyAlias`.
+     * @param {string} docTypeAlias 
+     * @param {string} propertyAlias 
+     * @returns {boolean}
+     */
+    $scope.isPropertyVisible = function(docTypeAlias, propertyAlias) { 
+        var isVisible = false;
+        $scope.pendingPermissions.forEach(function(permission) {
+            if (permission.alias === docTypeAlias) {
+                permission.properties.forEach(function(property) {
+                    if (property.alias === propertyAlias) {
+                        isVisible = true;
+                    }
+                })
+            }
+        });
+        return isVisible;
+    };
+
+    /**
+     * @method listVisibleProperties Returns a comma-separated string of the 
+     * property aliases of properties that are visible to GraphQL for the 
+     * docType with the matching `alias`.
+     * @param {string} alias The alias of the docType to look at the properties 
+     * of.
+     * @returns {string}
+     */
+    $scope.listVisibleProperties = function(alias) {
+        var visible = [];
+        $scope.permissions.forEach(function(permission) {
+            if (permission.alias === alias) {
+                permission.properties.forEach(function(property) {
+                    visible.push(property.alias);
+                });
+            }
+        });
+        return visible.join(', ');
+    }
+
     // Event Handler Methods ///////////////////////////////////////////////////
 
     /**
@@ -91,7 +170,9 @@ angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", 
     $scope.onChangeDocTypeClick = function(e) {
         e.preventDefault();
         $scope.groups = [];
+        $scope.pendingPermissions = [];
         $scope.selectedDocType = false;
+        $scope.selectedDocTypeAlias = '';
         $scope.selectedDocTypeName = '';
     };
 
@@ -104,10 +185,82 @@ angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", 
     $scope.onDocTypeClick = function(e) {
         e.preventDefault();
         var id = e.target.getAttribute('data-id');
+        $scope.pendingPermissions = JSON.parse(JSON.stringify($scope.permissions));
         $scope.selectedDocType = id;
+        $scope.selectedDocTypeAlias = e.target.getAttribute('data-alias');
         $scope.selectedDocTypeName = e.target.getAttribute('data-name');
         $scope.getPropertiesForDocType(id);
     };
+
+    /**
+     * @method onPropertyVisibilityChange Triggered when user clicks on the 
+     * checkbox for a doctype property. Toggles its visibility state in the 
+     * pendingPermissions array.
+     * @param {Event} e 
+     * @returns {void}
+     */
+    $scope.onPropertyVisibilityChange = function(e) {
+        var propertyAlias = e.target.getAttribute('data-alias');
+        var isChecked = e.target.checked;
+        var doesDocTypeHavePermissions = false;
+        var doesPropertyPermissionExist = false;
+        $scope.pendingPermissions.forEach(function(permission) {
+            if (permission.alias === $scope.selectedDocTypeAlias) {
+                doesDocTypeHavePermissions = true;
+                permission.properties.forEach(function(property, index) {
+                    if (property.alias === propertyAlias) {
+                        doesPropertyPermissionExist = true;
+                        permission.properties.splice(index, 1);
+                    }
+                });
+                if (!doesPropertyPermissionExist) {
+                    permission.properties.push({
+                        alias: propertyAlias,
+                        isBuiltInProperty: false // TODO: Need to know how to get true value for this.
+                    });
+                }
+            }
+        });
+        if (!doesDocTypeHavePermissions) {
+            $scope.pendingPermissions.push({
+                alias: $scope.selectedDocTypeAlias,
+                properties: [{
+                    alias: propertyAlias,
+                    isBuiltInProperty: false  // TODO: Need to know how to get true value for this.
+                }]
+            })
+        }
+    };
+
+    /**
+     * @method onSaveClick Triggered when the user clicks on the Save button at 
+     * the bottom of the properties visibility table for a docType. Saves the 
+     * current permissions for GraphQL visibility via API and then returns the 
+     * user to the 'select docType' view.
+     * @param {Event} e 
+     * @returns {void}
+     */
+    $scope.onSaveClick = function(e) {
+        $scope.permissions = JSON.parse(JSON.stringify($scope.pendingPermissions));
+        notificationsService.info(
+            "Saving...",
+            "saving GraphQL visibility permissions for " + $scope.selectedDocTypeAlias + "."
+        );
+        graphQLForUmbracoApiResource.set($scope.permissions).then(function(response) {
+            if (response.success == true) {
+                notificationsService.success(
+                    'Saved!',
+                    'Permissions for ' + $scope.selectedDocTypeAlias + ' saved.'
+                );
+                $scope.onChangeDocTypeClick(e);
+            } else {
+                notificationsService.error(
+                    'Save Failed',
+                    'There was a problem with saving the permissions for ' + $scope.selectedDocTypeAlias
+                );
+            }
+        });
+    }
 
     // Call $scope.init() //////////////////////////////////////////////////////
 
