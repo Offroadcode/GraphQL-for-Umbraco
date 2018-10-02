@@ -61,7 +61,9 @@ angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", 
                         docTypeAlreadyInPermission = true;
                         permission.properties.push({
                             alias: responsePermission.propertyAlias,
-                            isBuiltInProperty: responsePermission.isBuiltInProperty
+                            isBuiltInProperty: responsePermission.isBuiltInProperty,
+                            notes: responsePermission.notes,
+                            permission: responsePermission.permission
                         });
                     }
                 });
@@ -70,15 +72,40 @@ angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", 
                         alias: alias,
                         properties: [{
                             alias: responsePermission.propertyAlias,
-                            isBuiltInProperty: responsePermission.isBuiltInProperty
+                            isBuiltInProperty: responsePermission.isBuiltInProperty,
+                            notes: responsePermission.notes,
+                            permission: responsePermission.permission
                         }]
                     });
                 }
             });
         });
-    }
+    };
 
     // Helper Methods //////////////////////////////////////////////////////////
+
+    /**
+     * @method convertPermissionsForApi - Converts the permissions used in the 
+     * scope into a format used by the package.
+     * @param {JSON[]} permissions
+     * @returns {JSON[]}
+     */
+    $scope.convertPermissionsForApi = function(permissions) {
+        var forApi = [];
+        permissions = JSON.parse(JSON.stringify(permissions));
+        permissions.forEach(function(permission) {
+            permission.properties.forEach(function(property) {
+                forApi.push({
+                    docTypeAlias: permission.alias,
+                    isBuiltInProperty: property.isBuiltInProperty,
+                    notes: property.notes,
+                    permission: property.permission,
+                    propertyAlias: property.alias
+                });
+            });
+        });
+        return forApi;
+    };
 
     /**
      * @method getPropertiesForDocType Uses `contentTypeResource` to get a list 
@@ -216,7 +243,9 @@ angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", 
                 if (!doesPropertyPermissionExist) {
                     permission.properties.push({
                         alias: propertyAlias,
-                        isBuiltInProperty: false // TODO: Need to know how to get true value for this.
+                        isBuiltInProperty: false, // TODO: Need to know how to get true value for this.
+                        notes: '',
+                        permission: 'Read'                       
                     });
                 }
             }
@@ -226,7 +255,9 @@ angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", 
                 alias: $scope.selectedDocTypeAlias,
                 properties: [{
                     alias: propertyAlias,
-                    isBuiltInProperty: false  // TODO: Need to know how to get true value for this.
+                    isBuiltInProperty: false,  // TODO: Need to know how to get true value for this.
+                    notes: '',
+                    permission: 'Read'                      
                 }]
             })
         }
@@ -246,7 +277,8 @@ angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", 
             "Saving...",
             "saving GraphQL visibility permissions for " + $scope.selectedDocTypeAlias + "."
         );
-        graphQLForUmbracoApiResource.set($scope.permissions).then(function(response) {
+        var forApi = $scope.convertPermissionsForApi($scope.permissions);
+        graphQLForUmbracoApiResource.set(forApi).then(function(response) {
             if (response.success == true) {
                 notificationsService.success(
                     'Saved!',
@@ -258,6 +290,7 @@ angular.module("umbraco").controller("graphql.for.umbraco.dashboardcontroller", 
                     'Save Failed',
                     'There was a problem with saving the permissions for ' + $scope.selectedDocTypeAlias
                 );
+                console.error(response.error);
             }
         });
     }
